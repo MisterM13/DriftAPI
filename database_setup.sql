@@ -1,0 +1,1 @@
+create Table race (log_id INT AUTO_INCREMENT PRIMARY KEY, game_id varchar(50) not null, user_name varchar(50) not null,  `event`  varchar(50),`time`  datetime(3), target_code int, false_start bool,lap int, driven_distance int, driven_time int, lap_time time(3), score int, orientations json, total_score int, total_driven_distance int, total_driven_time int );

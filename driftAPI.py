@@ -32,8 +32,10 @@ class Race:
 	time: str = None
 	target_code: int = None
 	false_start: bool = None
+	lap: int = None
 	driven_distance: int = None
 	driven_time: int = None
+	lap_time: str = None
 	score: int = None
 	orientations: list = None
 	total_score: int = None
@@ -48,27 +50,24 @@ class Race:
 			self.time,
 			self.target_code,
 			self.false_start,
+			self.lap,
 			self.driven_distance,
 			self.driven_time,
+			self.lap_time,
 			self.score,
 			self.orientations,
 			self.total_score,
 			self.total_driven_distance,
-			self.total_driven_time,
+			self.total_driven_time
+			
 		)
-
-#Query to insert the data
-sql = """
-	INSERT INTO race (
-		game_id, user_name, `event`, `time`, target_code, false_start,
-		driven_distance, driven_time, score, orientations,
-		total_score, total_driven_distance, total_driven_time
-	) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-"""
-
 #----------
 
+#Query to insert the data
+sql = "INSERT INTO race (game_id, user_name, event, time, target_code, false_start, lap, driven_distance, driven_time, lap_time, score,orientations, total_score, total_driven_distance, total_driven_time) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
 
+
+# TODO: exception handling of database
 conn = pymysql.connect(
 	host=os.getenv("DB_HOST"),
 	user=os.getenv("DB_USER"),
@@ -80,15 +79,20 @@ cursor = conn.cursor()
 #games = [] #TODO: implement handling of multiple games
 users = []
 users_n = []
-user_times =[] # (user,time,flag) flag: s= start, r=round, f=finish
+user_times = [] # 'flag/lap/time' flag: s= start, r=round, f=finish
 cars = []
-total_laps = 5
+total_laps = 7
+first_round = []
 lap_counts = []
 false_starts=[]
 scores = []
 game_id = "Test1"
 
 spacer="------------------------------------------------------------------------"
+
+#TODO: handling the case, a car gets disconnected and directly hits target without start, or makes the same race again
+
+#def calculateLapTime(user_index): #TODO: implement lap_time calculation
 
 def printStats():
 	print("User","Car","false_start","laps","/","total_laps","score")
@@ -114,7 +118,7 @@ def read_root():
 @app.get("/game/{game_id}/ping")
 def getping(game_id):
 	#check(game_id)
-	return {"status":'true',"start_time":'null',"start_delay": 'null',"lap_count": 'null',"track_condition": 'null',"track_bundle": 'null',"wheels": 'null',"setup_mode": 'null'} #TODO: get infos from stats method/file
+	return {"status":'true',"start_time":'null',"start_delay": 'null',"lap_count": total_laps,"track_condition": 'null',"track_bundle": 'null',"wheels": 'null',"setup_mode": 'null'} #TODO: get infos from stats method/file
 
 #Enter the race
 @app.post("/game/{game_id}/enter")
@@ -128,12 +132,14 @@ async def getEnter(game_id,request: Request):
 	if user_id and user_name is not None:
 		users.append(user_id)
 		users_n.append(user_name)
+		user_times.append("")
 		if car_name is not None:
 			cars.append(car_name)
 		else:
 			cars.append("unknown car")
 		lap_counts.append(0)
 		scores.append(0)
+		first_round.append(True)
 		false_starts.append(False)
 		print(spacer,"Added new User:",user_name)
 		return "OK"
@@ -145,7 +151,8 @@ async def getStart(game_id,request: Request):
 	data = await request.json()
 	user_name = data.get("user_name")
 	time = data.get("data").get("signal_time")
-	user_times.append((user_name,time,"s"))
+	u = users_n.index(user_name)
+	user_times[u]+="/s/0/"+extractTime(time)+";"
 	print(spacer,user_name,"started the race")
 	race = Race(game_id=game_id, user_name=user_name, event="start",time=extractTime(time))
 	cursor.execute(sql, race.to_db_tuple())
@@ -160,23 +167,25 @@ async def getTarget(game_id,request: Request):
 	data = await request.json()
 	user_name = data.get("user_name")
 	time = data.get("data").get("crossing_time")
-	user_times.append((user_name,time,"r"))
+	u = users_n.index(user_name)
 	code = data.get("data").get("target_code")
 	false_start=data.get("data").get("false_start")
 	dd = data.get("data").get("driven_distance")
 	dt = data.get("data").get("driven_time")
 	orientations =data.get("data").get("orientations") #TODO: have to sort out some orientations format Problem.
-	for i in range(0,len(users_n)):
-		if users_n[i]==user_name:
-			false_starts[i]=false_start
-			scores[i] += data.get("data").get("score")
-			#print(scores[i])
-			lap_counts[i]+=1
-			race = Race(game_id=game_id, user_name=user_name, event="target",target_code=code,false_start=false_start, time=extractTime(time),driven_distance=dd,driven_time=dt)
-			cursor.execute(sql, race.to_db_tuple())
-			conn.commit()
-	printStats() 
-	print(spacer,user_name,"finished a round. Round Time:",time)
+	false_starts[u]=false_start
+	scores[u] += data.get("data").get("score")
+	#print(scores[i])
+	if not first_round[u]:
+		lap_counts[u]+=1
+		user_times[u]+="/t/"+str(lap_counts[u])+"/"+extractTime(time)+";"
+		race = Race(game_id=game_id, user_name=user_name, 	event="target",target_code=code,false_start=false_start, time=extractTime(time),driven_distance=dd,driven_time=dt,lap=lap_counts[u])
+		cursor.execute(sql, race.to_db_tuple())
+		conn.commit()
+		printStats() 
+		print(spacer,user_name,"finished a round. Round Time:",time)
+	else:
+		first_round[u]=False
 	return "OK"
 
 
@@ -187,7 +196,8 @@ async def getEnd(game_id,request: Request):
 	data = await request.json()
 	user_name = data.get("user_name")
 	time = data.get("data").get("finished_time")
-	user_times.append((user_name,time,"f"))
+	u = users_n.index(user_name)
+	user_times[u]+="/e/"+str(lap_counts[u])+"/"+extractTime(time)
 	tot_score = data.get("data").get("total_score")
 	tot_dd = data.get("data").get("total_driven_distance")
 	tot_dt = data.get("data").get("total_driven_time")
@@ -195,11 +205,9 @@ async def getEnd(game_id,request: Request):
 	cursor.execute(sql, race.to_db_tuple())
 	conn.commit()
 	print(spacer,user_name,"finished the race")
-	for i in range(0,len(users_n)):
-		if users_n[i]==user_name:
-			if scores[i]!=tot_score:
-				#print(scores[i])
-				print(spacer,"total score of",user_name,"did not equal added up score")
-				scores[i]=tot_score
+	if scores[u]!=tot_score:
+		#print(scores[i])
+		print(spacer,"total score of",user_name,"did not equal added up score")
+		scores[u]=tot_score
 	printStats() 
 	return "OK"
