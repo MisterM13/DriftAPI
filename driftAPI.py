@@ -79,7 +79,7 @@ cursor = conn.cursor()
 #games = [] #TODO: implement handling of multiple games
 users = []
 users_n = []
-user_times = [] # 'flag/lap/time' flag: s= start, r=round, f=finish
+user_times = [] # ';flag/lap/time' flag: s= start, r=round, f=finish
 cars = []
 total_laps = 7
 first_round = []
@@ -88,11 +88,40 @@ false_starts=[]
 scores = []
 game_id = "Test1"
 
-spacer="------------------------------------------------------------------------"
+spacer=70*"-"
 
 #TODO: handling the case, a car gets disconnected and directly hits target without start, or makes the same race again
 
-#def calculateLapTime(user_index): #TODO: implement lap_time calculation
+def getTime(formatted_lap):
+	time =  formatted_lap.split("/")[2].split(" ")[1]
+	h = int(time.split(":")[0])
+	m = int(time.split(":")[1])
+	s = float(time.split(":")[2])
+	return (h,m,s)
+	
+
+def calculateLapTime(user_index):
+	laps = user_times[user_index].split(";")
+	if len(laps)<2:
+		print("Error: No rounds finished yet.")
+	else:
+		(h1,m1,s1) = getTime(laps[-1])
+		(h2,m2,s2) = getTime(laps[-2])
+		h3 = h1-h2
+		m3 = m1-m2
+		s3 = s1-s2
+		if s3 < 0:
+			m3-=1
+			s3 = 60+s3
+		if m3 < 0:
+			h3-=1
+			m3 = 60+m3
+		if len(str(h3))<2:
+			h3 = "0"+str(h3)
+		if len(str(m3))<2:
+			m3 = "0"+str(m3)
+		return str(h3)+":"+str(m3)+":"+str(s3)
+	
 
 def printStats():
 	print("User","Car","false_start","laps","/","total_laps","score")
@@ -152,7 +181,7 @@ async def getStart(game_id,request: Request):
 	user_name = data.get("user_name")
 	time = data.get("data").get("signal_time")
 	u = users_n.index(user_name)
-	user_times[u]+="/s/0/"+extractTime(time)+";"
+	user_times[u]+="s/0/"+extractTime(time)
 	print(spacer,user_name,"started the race")
 	race = Race(game_id=game_id, user_name=user_name, event="start",time=extractTime(time))
 	cursor.execute(sql, race.to_db_tuple())
@@ -178,14 +207,16 @@ async def getTarget(game_id,request: Request):
 	#print(scores[i])
 	if not first_round[u]:
 		lap_counts[u]+=1
-		user_times[u]+="/t/"+str(lap_counts[u])+"/"+extractTime(time)+";"
-		race = Race(game_id=game_id, user_name=user_name, 	event="target",target_code=code,false_start=false_start, time=extractTime(time),driven_distance=dd,driven_time=dt,lap=lap_counts[u])
+		user_times[u]+=";t/"+str(lap_counts[u])+"/"+extractTime(time)
+		#print(40*"#",user_times[u])
+		race = Race(game_id=game_id, user_name=user_name, 	event="target",target_code=code,false_start=false_start, time=extractTime(time),driven_distance=dd,driven_time=dt,lap=lap_counts[u],lap_time=calculateLapTime(u))
 		cursor.execute(sql, race.to_db_tuple())
 		conn.commit()
 		printStats() 
-		print(spacer,user_name,"finished a round. Round Time:",time)
+		print(spacer,user_name,"finished a round. Round Time:",time,calculateLapTime(u))
 	else:
 		first_round[u]=False
+		print(spacer,user_name,"went over start the first Time.")
 	return "OK"
 
 
@@ -197,7 +228,7 @@ async def getEnd(game_id,request: Request):
 	user_name = data.get("user_name")
 	time = data.get("data").get("finished_time")
 	u = users_n.index(user_name)
-	user_times[u]+="/e/"+str(lap_counts[u])+"/"+extractTime(time)
+	user_times[u]+=";e/"+str(lap_counts[u])+"/"+extractTime(time)
 	tot_score = data.get("data").get("total_score")
 	tot_dd = data.get("data").get("total_driven_distance")
 	tot_dt = data.get("data").get("total_driven_time")

@@ -13,7 +13,7 @@ This script was build to easily receive the data from the Dr!ft App over the Dri
 1. Create a [MySQL](https://www.mysql.com) Database.
 2. Create following table with an sql query:
 ```sql
-create Table race (log_id INT AUTO_INCREMENT PRIMARY KEY, game_id varchar(50) not null, user_name varchar(50) not null,  `event`  varchar(50),`time`  datetime, target_code int, false_start bool, driven_distance int, driven_time int, score int, orientations json, total_score int, total_driven_distance int, total_driven_time int );
+create  Table  race (log_id INT AUTO_INCREMENT PRIMARY KEY, game_id varchar(50) not null, user_name varchar(50) not null, `event`  varchar(50),`time` datetime(3), target_code int, false_start bool,lap int, driven_distance int, driven_time int, lap_time time(3), score int, orientations json, total_score int, total_driven_distance int, total_driven_time int );
 ```
 3. Create an .env File inside the Project Folder with the access data to the Database:
 ```
@@ -46,7 +46,7 @@ You can also try to run the Script with self signed Certificates. However I coul
 
 - [ ] no settings for the cars/races yet
 - [ ] handles only one race at the time
-- [ ] no calculations of the lap durations yet
+- [x]  calculations of the lap durations
 - [x] one instance to collect all the data from start, target and end
 - [ ] problem with collecting the orientations data
 - [x] on time status printouts
